@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscaminas</title>
+    <style>
+        table {
+            border-collapse: collapse;
+        }
+        td {
+            width: 30px;
+            height: 30px;
+            border: 1px solid black;
+            text-align: center;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Buscaminas</h1>
+    <label for="rows">Filas:</label>
+    <input type="number" id="rows" value="10" min="1">
+    <label for="cols">Columnas:</label>
+    <input type="number" id="cols" value="10" min="1">
+    <label for="mines">Minas:</label>
+    <input type="number" id="mines" value="10" min="1">
+    <button id="start">Iniciar Juego</button>
+    <button id="reveal">Resolver</button>
+    <div id="board"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let currentGameId = null; // Variable para almacenar el ID del juego actual
+
+        let cols; // Variable para almacenar el número de columnas
+
+        document.getElementById('start').onclick = function() {
+            const rows = document.getElementById('rows').value;
+            cols = document.getElementById('cols').value; // Almacena el número de columnas
+            const mines = document.getElementById('mines').value;
+
+            socket.emit('start_game', { rows, cols, mines });
+        };
+
+        socket.on('game_started', function(data) {
+            const board = data.board;
+            currentGameId = data.game_id; // Guardar el ID del juego actual
+            renderBoard(board);
+        });
+
+        function renderBoard(board) {
+            const boardDiv = document.getElementById('board');
+            boardDiv.innerHTML = '';
+            const table = document.createElement('table');
+
+            for (let row = 0; row < board.length; row++) {
+                const tr = document.createElement('tr');
+                for (let col = 0; col < board[row].length; col++) {
+                    const td = document.createElement('td');
+                    td.onclick = function() {
+                        socket.emit('cell_clicked', { game_id: currentGameId, row: row, col: col });
+                    };
+                    tr.appendChild(td);
+                }
+                table.appendChild(tr);
+            }
+            boardDiv.appendChild(table);
+        }
+
+        socket.on('cell_result', function(data) {
+            const row = data.row;
+            const col = data.col;
+            const value = data.value;
+            const td = document.querySelector(`tr:nth-child(${row + 1}) td:nth-child(${col + 1})`);
+            
+            // Cambiar el color de fondo a rojo si se presiona una mina
+            if (value === -1) {
+                td.style.backgroundColor = 'red'; // Cambiar el color de fondo a rojo
+                td.textContent = '💣'; // Mostrar la mina
+                alert('¡Juego terminado! Has hecho clic en una mina.');
+                disableBoard(); // Deshabilitar el tablero
+            } else {
+                td.textContent = value; // Mostrar el valor de la celda
+            }
+        });
+
+        document.getElementById('reveal').onclick = () => {
+            if (currentGameId) {
+                socket.emit('reveal_mines', { game_id: currentGameId });
+            } else {
+                alert('No hay un juego activo para resolver.');
+            }
+        };
+
+        socket.on('mines_revealed', (data) => {
+            console.log('Mines revealed:', data.mines);
+            data.mines.forEach(mine => {
+                const row = Math.floor(mine / cols); // Usa la variable cols
+                const col = mine % cols; // Usa la variable cols
+                const cell = document.querySelector(`#board tr:nth-child(${row + 1}) td:nth-child(${col + 1})`);
+                if (cell) { // Verifica que la celda exista
+                    cell.innerHTML = '💣'; // Revelar mina
+                }
+            });
+            alert('Se han revelado todas las minas.');
+            disableBoard(); // Deshabilitar el tablero
+        });
+
+        function disableBoard() {
+            const cells = document.querySelectorAll('#board td');
+            cells.forEach(cell => {
+                cell.onclick = null; // Deshabilitar clics
+                cell.style.cursor = 'not-allowed'; // Cambiar el cursor para indicar que no se puede hacer clic
+            });
+        }
+    </script>
+</body>
+</html>
